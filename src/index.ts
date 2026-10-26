@@ -51,6 +51,8 @@ export class ZoomAdapter implements Adapter {
    * Populated during webhook handling so postMessage/editMessage/deleteMessage
    * can include user_jid in Zoom API requests (required per Zoom chatbot API). */
   private readonly threadUserJid = new Map<string, string>();
+  /** Maps threadId -> reply_main_message_id for threaded mention replies. */
+  private readonly threadReplyMainId = new Map<string, string>();
 
   constructor(config: ZoomAdapterInternalConfig) {
     this.config = config;
@@ -279,9 +281,18 @@ export class ZoomAdapter implements Adapter {
       channel_id: channelId,
       message,
       timestamp,
+      reply_main_message_id: replyMainId,
     } = payload.payload.object;
 
-    const threadId = this.encodeThreadId({ channelId, messageId });
+    const rootMessageId = replyMainId || messageId;
+    const threadId = this.encodeThreadId({
+      channelId,
+      messageId: rootMessageId,
+    });
+
+    if (replyMainId) {
+      this.threadReplyMainId.set(threadId, replyMainId);
+    }
 
     const text = message;
     const formatted = this.formatConverter.toAst(text);
@@ -370,7 +381,8 @@ export class ZoomAdapter implements Adapter {
     // MSG-02: threading — add reply_main_message_id if present
     // ZoomMessageWithReply is the Zoom-specific extension type for threaded replies
     const zoomMsg = message as ZoomMessageWithReply;
-    const replyTo = zoomMsg.metadata?.replyTo;
+    const replyTo =
+      zoomMsg.metadata?.replyTo ?? this.threadReplyMainId.get(threadId);
     if (replyTo && isDM) {
       this.config.logger.debug(
         "Posting threaded reply to DM thread — Zoom does not fire chat_message.replied webhook for 1:1 DM thread replies (THRD-03)"

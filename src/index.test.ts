@@ -384,6 +384,63 @@ describe("ZoomAdapter — team_chat.app_mention (WBHK-05)", () => {
     expect(message.text).toBe("@bot please help");
     expect(message.author.userId).toBe("user-id-3");
   });
+
+  it("WBHK-05-b: team_chat.app_mention with reply_main_message_id keys threadId on parent and sets metadata", async () => {
+    const adapter = createZoomAdapter(TEST_CREDENTIALS);
+    const chat = makeMockChat();
+    await adapter.initialize(chat);
+
+    const messageId = "reply-uuid-1111";
+    const parentId = "parent-uuid-0000";
+    const channelId = "channel-id-456";
+    const body = JSON.stringify({
+      event: "team_chat.app_mention",
+      event_ts: 1_712_600_002_000,
+      payload: {
+        account_id: "acct",
+        by_external_user: false,
+        object: {
+          channel_id: channelId,
+          channel_name: "general",
+          date_time: "2024-04-08T12:00:00Z",
+          message: "@bot threaded reply",
+          message_id: messageId,
+          reply_main_message_id: parentId,
+          timestamp: 1_712_577_600_000,
+          type: "to_channel",
+        },
+        operator: "dave@example.com",
+        operator_id: "user-id-4",
+        operator_member_id: "member-id-4",
+      },
+    });
+    const request = makeZoomRequest(body);
+    await adapter.handleWebhook(request);
+
+    expect(chat.processMessage).toHaveBeenCalledOnce();
+    const [, threadId, message] = (
+      chat.processMessage as ReturnType<typeof vi.fn>
+    ).mock.calls[0];
+    expect(threadId).toBe(`zoom:${channelId}:${parentId}`);
+    expect(message.id).toBe(messageId);
+    expect(message.raw.payload.object.reply_main_message_id).toBe(parentId);
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: () => Promise.resolve({ message_id: "bot-reply-uuid" }),
+      ok: true,
+      status: 200,
+      text: () =>
+        Promise.resolve(JSON.stringify({ message_id: "bot-reply-uuid" })),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(adapter, "getAccessToken").mockResolvedValue("test-token");
+
+    await adapter.postMessage(threadId, "Bot thread answer");
+    const callBody = JSON.parse(
+      (fetchMock.mock.calls[0][1] as { body: string }).body
+    ) as Record<string, unknown>;
+    expect(callBody.reply_main_message_id).toBe(parentId);
+  });
 });
 
 const POST_MESSAGE_ERROR_PATTERN = /postMessage.*403|403.*postMessage/;
