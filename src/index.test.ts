@@ -818,3 +818,56 @@ describe("ZoomAdapter — Unhandled events and uninitialized adapter safety (THR
     expect(response.status).toBe(200); // no crash
   });
 });
+
+describe("ZoomAdapter — fetchMessages & fetchThread (HIST-01, HIST-02)", () => {
+  it("HIST-01: fetchMessages returns empty FetchResult without throwing", async () => {
+    const adapter = createZoomAdapter(TEST_CREDENTIALS);
+    const threadId = "zoom:channel123@conference.xmpp.zoom.us:msg456";
+
+    const result = await adapter.fetchMessages(threadId);
+
+    expect(result).toEqual({
+      messages: [],
+      nextCursor: undefined,
+    });
+  });
+
+  it("HIST-02: fetchThread returns valid ThreadInfo for channel thread and DM thread", async () => {
+    const adapter = createZoomAdapter(TEST_CREDENTIALS);
+
+    // Channel thread (isDM = false)
+    const channelThreadId = "zoom:mychannel@conference.xmpp.zoom.us:rootmsg1";
+    const channelThread = await adapter.fetchThread(channelThreadId);
+    expect(channelThread).toEqual({
+      channelId: "mychannel@conference.xmpp.zoom.us",
+      channelName: undefined,
+      id: channelThreadId,
+      isDM: false,
+      metadata: {
+        channelId: "mychannel@conference.xmpp.zoom.us",
+        messageId: "rootmsg1",
+      },
+    });
+
+    // DM thread (isDM = true)
+    const dmThreadId = "zoom:user123@xmpp.zoom.us:rootmsg2";
+    const dmThread = await adapter.fetchThread(dmThreadId);
+    expect(dmThread).toEqual({
+      channelId: "user123@xmpp.zoom.us",
+      channelName: undefined,
+      id: dmThreadId,
+      isDM: true,
+      metadata: {
+        channelId: "user123@xmpp.zoom.us",
+        messageId: "rootmsg2",
+      },
+    });
+  });
+
+  it("HIST-03: fetchThread throws ValidationError for invalid thread ID", async () => {
+    const adapter = createZoomAdapter(TEST_CREDENTIALS);
+    await expect(adapter.fetchThread("invalid-prefix:123")).rejects.toThrow(
+      ValidationError
+    );
+  });
+});

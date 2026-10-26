@@ -448,23 +448,33 @@ export class ZoomAdapter implements Adapter {
     );
   }
 
-  // biome-ignore lint/suspicious/useAwait: throwing inside async yields a rejected Promise, which callers await
+  // biome-ignore lint/suspicious/useAwait: async required by Adapter interface contract
   async fetchMessages(
     _threadId: string,
     _options?: FetchOptions
   ): Promise<FetchResult<unknown>> {
-    throw new NotImplementedError(
-      "ZoomAdapter: fetchMessages not yet implemented",
-      "fetchMessages"
+    this.config.logger.debug(
+      "ZoomAdapter: fetchMessages called; returning empty history (history API requires user-scoped OAuth token)",
+      { threadId: _threadId }
     );
+    return {
+      messages: [],
+      nextCursor: undefined,
+    };
   }
 
-  // biome-ignore lint/suspicious/useAwait: throwing inside async yields a rejected Promise, which callers await
-  async fetchThread(_threadId: string): Promise<ThreadInfo> {
-    throw new NotImplementedError(
-      "ZoomAdapter: fetchThread not yet implemented",
-      "fetchThread"
-    );
+  // biome-ignore lint/suspicious/useAwait: async required by Adapter interface contract
+  async fetchThread(threadId: string): Promise<ThreadInfo> {
+    const { channelId, messageId } = this.decodeThreadId(threadId);
+    return {
+      channelId,
+      id: threadId,
+      isDM: this.isDM(threadId),
+      metadata: {
+        channelId,
+        messageId,
+      },
+    };
   }
 
   // biome-ignore lint/suspicious/useAwait: throwing inside async yields a rejected Promise, which callers await
